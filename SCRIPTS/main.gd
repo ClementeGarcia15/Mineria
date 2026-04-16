@@ -3,7 +3,7 @@ extends Node3D
 var player: Player
 var debug_camera: DebugCamera
 
-var voxel_world: VoxelWorld1
+var voxel_world: VoxelWorld
 var is_debug_mode = false
 
 func _ready() -> void:
@@ -14,7 +14,7 @@ func _ready() -> void:
 	light.rotate_x(deg_to_rad(-45))
 	add_child(light)
 	
-	voxel_world = VoxelWorld1.new()
+	voxel_world = VoxelWorld.new()
 	voxel_world.name = "VoxelWorld"
 	add_child(voxel_world)
 	

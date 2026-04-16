@@ -2,7 +2,7 @@
 class_name Player
 extends CharacterBody3D
 
-# --- Sensibilidad y Movimiento player---
+# --- Sensibilidad y Movimiento ---
 @export var speed: float = 5.0
 @export var jump_velocity: float = 4.5
 @export var mouse_sensitivity: float = 0.005  # Radianes por píxel de movimiento del ratón
@@ -16,15 +16,14 @@ var mineral_count: int = 0
 var pickaxe_power: float = 25.0
 # CREACION DEL INVENTARIO
 var inventory = {
-	VoxelWorld.DIAMOND: 0,
-	VoxelWorld.RUBY: 0,
-	VoxelWorld.DIRT: 0,
+	VoxelWorld1.DIAMOND: 0,
+	VoxelWorld1.RUBY: 0,
+	VoxelWorld1.STONE: 0,
 }
 # REFERENCIA A VOXELWORLD
-var voxel_world: VoxelWorld
-var shop_ui_scene: PackedScene
-var shop_ui_instance: Control
-var current_collectible_target: CreateHallazgo = null
+var voxel_world: VoxelWorld1
+#var shop_ui_scene: PackedScene
+#var shop_ui_instance: Control
 
 # VARIABLE PARA DESACTIVAR O ACTIVAR EL CONTROL DE PALYER
 var is_active: bool = true
@@ -38,21 +37,22 @@ func get_camera_transform() -> Transform3D:
 func make_camera_current():
 	camera.make_current()
 
-func _ready() -> void:
-	#var world_nodes = get_tree().get_nodes_in_group("voxel_world_group")
-	#if world_nodes.size() > 0:
-		#set_voxel_world_reference(world_nodes[0])
-	#else:
-		#print("ERROR: No se pudo encontrar el nodo VoxelWorld en el grupo 'voxel_world_group'.")
-	
-	shop_ui_scene = preload("res://SCENES/ShopUI.tscn")
-	shop_ui_instance = shop_ui_scene.instantiate()
-	get_tree().get_root().add_child(shop_ui_instance)
-	shop_ui_instance.set_player_reference(self)
-	
-	shop_ui_instance.hide()
-	shop_ui_instance.shop_closed.connect(_on_shop_closed)
-	shop_ui_instance.pickaxe_upgraded.connect(_on_pickaxe_upgraded)
+#func _ready() -> void:
+#	# Esperar a que el mundo de vóxeles esté listo y obtener su referencia
+#	var world_nodes = get_tree().get_nodes_in_group("voxel_world_group")
+#	if world_nodes.size() > 0:
+#		set_voxel_world_reference(world_nodes[0])
+#	else:
+#		print("Error: No se encontró el nodo VoxelWorld en el grupo 'voxel_world_group'.")
+#	
+#	shop_ui_scene = preload("res://SCENES/ShopUI.tscn")
+#	shop_ui_instance = shop_ui_scene.instantiate()
+#	get_tree().get_root().add_child(shop_ui_instance)
+#	shop_ui_instance.set_player_reference(self)
+#	
+#	shop_ui_instance.hide()
+#	shop_ui_instance.shop_closed.connect(_on_shop_closed)
+#	shop_ui_instance.pickaxe_upgraded.connect(_on_pickaxe_upgraded)
 
 func _init():
 	# El jugador "emite" en la capa 2 (objetos dinámicos).
@@ -61,13 +61,15 @@ func _init():
 	set_collision_mask_value(1, true)
 	
 	var collision_shape = CollisionShape3D.new()
-	var capsule_shape = CapsuleShape3D.new()
-	collision_shape.shape = capsule_shape
+#	var capsule_shape = CapsuleShape3D.new()
+	var box_shape = BoxShape3D.new()
+	box_shape.size = Vector3(0.8, 1.8, 0.8)
+	collision_shape.shape = box_shape
 	add_child(collision_shape)
 	
 	var visual_body = MeshInstance3D.new()
 	var visual_mesh = BoxMesh.new()
-	visual_mesh.size = Vector3(0.8, 1.8, 0.8)
+	visual_mesh.size = box_shape.size
 	visual_body.mesh = visual_mesh
 	
 	var materiaL = StandardMaterial3D.new()
@@ -83,11 +85,9 @@ func _init():
 	add_child(camera)
 	
 	raycast = RayCast3D.new()
-	raycast.target_position = Vector3(0,0,-5)
+	raycast.target_position = Vector3(0,0,-10)
 	camera.add_child(raycast)
 	raycast.add_exception(self)
-	raycast.set_collision_mask(0)
-	raycast.set_collision_mask_value(1,true)
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 func add_to_inventory(voxel_type: int):
@@ -97,7 +97,7 @@ func add_to_inventory(voxel_type: int):
 	else:
 		print("Intentando anhadir un tipo de mineral desconocido: ", voxel_type)
 
-func set_voxel_world_reference(wolrd_node: VoxelWorld):
+func set_voxel_world_reference(wolrd_node: VoxelWorld1):
 	self.voxel_world = wolrd_node
 	self.voxel_world.voxel_mined.connect(add_to_inventory)
 
@@ -118,60 +118,39 @@ func _unhandled_input(event: InputEvent):
 		camera.rotate_x(-event.relative.y * mouse_sensitivity)
 		# Usamos clamp para limitar el ángulo entre -90 y +90 grados.
 		camera.rotation.x = clamp(camera.rotation.x, deg_to_rad(-90), deg_to_rad(90))
-	
-	#if event is InputEventKey and event.keycode == KEY_G and event.is_pressed():
-		#if is_instance_valid(voxel_world):
-			#print("--- PRUEBA: Excavando bloque fijo en (8, 7, 8)")
-			#voxel_world.set_voxel(8, 7, 8, 0)
-		#return
-	
-	if event is InputEventKey and event.keycode == KEY_B and event.is_pressed():
-		shop_ui_instance.show()
-		set_active_player_controller(false)
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		return
-	
+#	if event is InputEventKey and event.keycode == KEY_G and event.is_pressed():
+#		if is_instance_valid(voxel_world):
+#			print("--- PRUEBA: Excavando bloque fijo en (8, 7, 8) ---")
+#			voxel_world.set_voxel(8, 7, 8, 0)
+#		return
+#	if event is InputEventKey and event.keycode == KEY_B and event.is_pressed():
+#		shop_ui_instance.show()
+#		set_active_player_controller(false)
+#		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+#		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.is_pressed():
-		if is_instance_valid(current_collectible_target):
-			current_collectible_target.do_collect()
-			return
 		raycast.force_raycast_update()
 		if raycast.is_colliding():
 			var collider = raycast.get_collider()
 			if collider is VoxelWorld:
-				
 				var collision_point = raycast.get_collision_point()
 				var collision_normal = raycast.get_collision_normal()
-				
-				var pos_in_front = (collision_point + collision_normal * 0.1).floor()
-				var pos_behind = (collision_point - collision_normal * 0.1).floor()
-				var air_voxel_pos = pos_in_front
-				var solid_voxel_pos = pos_behind
-				if voxel_world.get_voxel(air_voxel_pos.x, air_voxel_pos.y, air_voxel_pos.z) != VoxelWorld.AIR:
-					# Si el bloque "de en frente" no es aire, significa que el cálculo se invirtió.
-					# Esto puede pasar con normales extrañas. Lo corregimos.
-					air_voxel_pos = pos_behind
-					solid_voxel_pos = pos_in_front
-				# La posición final a eliminar es siempre la del bloque sólido.
-				var voxel_pos_to_remove = solid_voxel_pos
-				var voxel_x = int(floor(voxel_pos_to_remove.x))
-				var voxel_y = int(floor(voxel_pos_to_remove.y))
-				var voxel_z = int(floor(voxel_pos_to_remove.z))
+				var voxel_pos = collision_point - collision_normal * 0.1
+				var voxel_x = int(floor(voxel_pos.x))
+				var voxel_y = int(floor(voxel_pos.y))
+				var voxel_z = int(floor(voxel_pos.z))
 				if is_instance_valid(voxel_world):
 					print("Intentando excavar en: (%d, %d, %d)" % [voxel_x, voxel_y, voxel_z])
-					voxel_world.set_voxel(voxel_x, voxel_y, voxel_z, VoxelWorld.AIR)
+					voxel_world.set_voxel(voxel_x, voxel_y, voxel_z, 0)
 
-func _on_shop_closed():
-	shop_ui_instance.hide()
-	set_active_player_controller(true)
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+#func _on_shop_closed():
+#	shop_ui_instance.hide()
+#	set_active_player_controller(true)
+#	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
-func _on_pickaxe_upgraded():
-	pickaxe_power += 10.0
-	print("Poder del pico mejorado a: ", pickaxe_power)
-
-func set_collectible_target(target: CreateHallazgo):
-	self.current_collectible_target = target
+#func _on_pickaxe_upgraded():
+#	pickaxe_power += 10.0
+#	print("Poder del pico mejorado a: ", pickaxe_power)
 
 func _physics_process(delta: float):
 	if not is_active:
@@ -202,9 +181,3 @@ func _physics_process(delta: float):
 
 	# --- PASO 5: Ejecutar el movimiento ---
 	move_and_slide()
-	
-	#if raycast.is_colliding():
-		#var collider = raycast.get_collider()
-		#var collision_point = raycast.get_collision_point()
-		#print("PUNTO DE COLISION: ", collision_point)
-		#print("COLISIONANDO CON: ", collider)

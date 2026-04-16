@@ -1,7 +1,7 @@
 class_name VoxelWorld
 extends StaticBody3D 
 
-var noise: FastNoiseLite
+#var noise: FastNoiseLite
 
 const AIR = 0
 const DIRT = 1
@@ -145,7 +145,7 @@ func _init() -> void:
 	set_collision_layer_value(1, true)
 	set_collision_mask_value(2, true)
 	
-	noise = FastNoiseLite.new()
+#	noise = FastNoiseLite.new()
 	mesh_instance = MeshInstance3D.new()
 	
 	var materialVoxel = StandardMaterial3D.new()
@@ -157,14 +157,14 @@ func _init() -> void:
 	collision_shape = CollisionShape3D.new()
 	add_child(collision_shape)
 	
-	noise.fractal_octaves = 4
-	noise.fractal_lacunarity = 2.0
-	noise.fractal_gain = 0.5
+#	noise.fractal_octaves = 4
+#	noise.fractal_lacunarity = 2.0
+#	noise.fractal_gain = 0.5
 	
-	#world_data.resize(CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z)
+	world_data.resize(CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z)
 
 func _ready() -> void:
-	add_to_group("voxel_world_group")
+#	add_to_group("voxel_world_group")
 	_populate_world_data()
 	
 	# ¡MODIFICADO! Generar todos los chunks al inicio.
@@ -386,9 +386,10 @@ func generate_chunk_mesh(chunk_pos: Vector3i):
 	# ANHADIENDO COLORES ANTES DE ANHADIR VETICES
 	
 					var avg_pos = (v1 + v2 + v3) / 3.0
-					var floor_pos = avg_pos.floor()
+					var sample_pos = avg_pos - Vector3(0, 0.01, 0)
+					#var floor_pos = avg_pos.floor()
 					
-					var voxel_type = get_voxel(floor_pos.x, floor_pos.y, floor_pos.z)
+					var voxel_type = get_voxel(sample_pos.x, sample_pos.y, sample_pos.z)
 					
 					if voxel_type == AIR:
 						var found_solid = false
@@ -396,7 +397,7 @@ func generate_chunk_mesh(chunk_pos: Vector3i):
 							for z_offset in [0, -1, 1]:
 								for x_offset in [0, -1, 1]:
 									if found_solid: break
-									var check_pos = floor_pos + Vector3(x_offset, y_offset, z_offset)
+									var check_pos = sample_pos + Vector3(x_offset, y_offset, z_offset)
 									var current_type = get_voxel(check_pos.x, check_pos.y, check_pos.z)
 									if current_type != AIR:
 										voxel_type = current_type
@@ -404,7 +405,7 @@ func generate_chunk_mesh(chunk_pos: Vector3i):
 										break
 								if found_solid: break
 							if found_solid: break
-					var color = VOXEL_COLORS.get(voxel_type, Color.WHITE)
+					var color = VOXEL_COLORS.get(voxel_type, VOXEL_COLORS[DIRT])
 					st.set_color(color)
 					
 					# --- FIN DE COLORIZACION DEL TERRENO --- 
