@@ -145,7 +145,6 @@ func _init() -> void:
 	set_collision_layer_value(1, true)
 	set_collision_mask_value(2, true)
 	
-#	noise = FastNoiseLite.new()
 	mesh_instance = MeshInstance3D.new()
 	
 	var materialVoxel = StandardMaterial3D.new()
@@ -157,14 +156,9 @@ func _init() -> void:
 	collision_shape = CollisionShape3D.new()
 	add_child(collision_shape)
 	
-#	noise.fractal_octaves = 4
-#	noise.fractal_lacunarity = 2.0
-#	noise.fractal_gain = 0.5
-	
 	world_data.resize(CHUNK_SIZE_X * CHUNK_SIZE_Y * CHUNK_SIZE_Z)
 
 func _ready() -> void:
-#	add_to_group("voxel_world_group")
 	_populate_world_data()
 	
 	# ¡MODIFICADO! Generar todos los chunks al inicio.
@@ -172,7 +166,7 @@ func _ready() -> void:
 		for cy in range(CHUNK_SIZE_Y / SUB_CHUNK_SIZE):
 			for cx in range(CHUNK_SIZE_X / SUB_CHUNK_SIZE):
 				var chunk_pos = Vector3i(cx, cy, cz)
-				generate_chunk_mesh(chunk_pos)
+				generate_mesh(chunk_pos)
 
 func _get_voxel_index(x: int,y: int, z: int) -> int:
 	return y * CHUNK_SIZE_X * CHUNK_SIZE_Z + z * CHUNK_SIZE_X + x
@@ -222,9 +216,9 @@ func _populate_world_data():
 	rng.randomize()
 	print("Enterrando %d hallazgos..." % num_hallazgos)
 	for i in range(num_hallazgos):
-		var hallazgo_x = rng.randi_range(2, CHUNK_SIZE_X - 3)
-		var hallazgo_y = rng.randi_range(1, 5)
-		var hallazgo_z = rng.randi_range(2, CHUNK_SIZE_Z - 3)
+		var hallazgo_x = rng.randi_range(0, CHUNK_SIZE_X)
+		var hallazgo_y = rng.randi_range(0, 5)
+		var hallazgo_z = rng.randi_range(0, CHUNK_SIZE_Z)
 		
 		var hallazgo_pos = Vector3(hallazgo_x, hallazgo_y, hallazgo_z)
 		
@@ -247,7 +241,6 @@ func set_voxel(x: int, y: int, z: int, type: int):
 	# 3. Si todo está bien, modificamos y regeneramos.
 	print("¡Éxito! Modificando vóxel en (%d, %d, %d) y regenerando." % [x, y, z])
 	world_data[index] = type
-	
 	
 	# --- SECCIÓN DE ACTUALIZACIÓN DE CHUNKS (LA VERSIÓN FINAL Y CORRECTA) ---
 	var chunks_to_update: Dictionary = {}
@@ -288,7 +281,120 @@ func set_voxel(x: int, y: int, z: int, type: int):
 		if chunk_pos.x >= 0 and chunk_pos.x < CHUNK_SIZE_X / SUB_CHUNK_SIZE and \
 		chunk_pos.y >= 0 and chunk_pos.y < CHUNK_SIZE_Y / SUB_CHUNK_SIZE and \
 		chunk_pos.z >= 0 and chunk_pos.z < CHUNK_SIZE_Z / SUB_CHUNK_SIZE:
-			generate_chunk_mesh(chunk_pos)
+			print("CHUNK POS: ", chunk_pos)
+			generate_mesh(chunk_pos)
+
+func generate_mesh(chunk_pos: Vector3i):
+	# Si el chunk no existe en nuestro diccionario, lo creamos.
+	if not chunk_nodes.has(chunk_pos):
+		var new_mesh_instance = MeshInstance3D.new()
+		var materialVoxel = StandardMaterial3D.new()
+		materialVoxel.vertex_color_use_as_albedo = true
+		materialVoxel.roughness = 1.0
+		new_mesh_instance.material_overlay = materialVoxel
+		
+		var new_collision_shape = CollisionShape3D.new()
+		
+		add_child(new_mesh_instance)
+		add_child(new_collision_shape)
+		
+		chunk_nodes[chunk_pos] = {
+			"mesh_instance": new_mesh_instance,
+			"collision_shape": new_collision_shape
+		}
+	#
+	## Usaremos un SurfaceTool para construir la malla. Es más fácil que manejar arrays crudos.
+	var st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	
+	# Definimos las 6 caras de un cubo. Cada cara tiene 4 vértices.
+	# El orden es importante para que la cara "mire" hacia afuera.
+	var face_vertices = [
+		# Cara -Y (Abajo)
+		[Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 1), Vector3(0, 0, 1)],
+		# Cara +Y (Arriba)
+		[Vector3(0, 1, 1), Vector3(1, 1, 1), Vector3(1, 1, 0), Vector3(0, 1, 0)],
+		# Cara -Z (Atrás)
+		[Vector3(1, 0, 0), Vector3(0, 0, 0), Vector3(0, 1, 0), Vector3(1, 1, 0)],
+		# Cara +Z (Adelante)
+		[Vector3(0, 0, 1), Vector3(1, 0, 1), Vector3(1, 1, 1), Vector3(0, 1, 1)],
+		# Cara -X (Izquierda)
+		[Vector3(0, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 1), Vector3(0, 1, 0)],
+		# Cara +X (Derecha)
+		[Vector3(1, 0, 1), Vector3(1, 0, 0), Vector3(1, 1, 0), Vector3(1, 1, 1)]
+	]
+	
+	# Direcciones para comprobar los vecinos de cada cara.
+	var face_normals = [
+		Vector3i.DOWN, # Abajo
+		Vector3i.UP,  # Arriba
+		Vector3i.BACK, # Atrás
+		Vector3i.FORWARD,  # Adelante
+		Vector3i.LEFT, # Izquierda
+		Vector3i.RIGHT   # Derecha
+	]
+	
+	var start_x = chunk_pos.x * SUB_CHUNK_SIZE
+	var start_y = chunk_pos.y * SUB_CHUNK_SIZE 
+	var start_z = chunk_pos.z * SUB_CHUNK_SIZE
+
+	var end_x = chunk_pos.x + SUB_CHUNK_SIZE
+	var end_y = chunk_pos.y + SUB_CHUNK_SIZE 
+	var end_z = chunk_pos.z + SUB_CHUNK_SIZE
+
+	# Recorremos cada vóxel del chunk
+	for y in range(start_y, end_y):
+		for z in range(start_z, end_z):
+			for x in range(start_x, end_x):
+				var voxel_type = get_voxel(x, y, z)
+				
+				# Si el vóxel es aire, no hay nada que dibujar.
+				if voxel_type == AIR:
+					continue
+				
+				# Obtenemos el color para este tipo de vóxel.
+				var color = VOXEL_COLORS.get(voxel_type, Color.MAGENTA) # Magenta si hay error
+				st.set_color(color)
+
+				# Comprobamos las 6 caras del vóxel actual.
+				for i in range(6):
+					var neighbor_pos = Vector3i(x, y, z) + face_normals[i]
+					var neighbor_type = get_voxel(neighbor_pos.x, neighbor_pos.y, neighbor_pos.z)
+					
+					# Si el vecino es aire, esta cara es visible y debemos dibujarla.
+					if neighbor_type == AIR:
+						var v0 = face_vertices[i][0] + Vector3(x, y, z)
+						var v1 = face_vertices[i][1] + Vector3(x, y, z)
+						var v2 = face_vertices[i][2] + Vector3(x, y, z)
+						var v3 = face_vertices[i][3] + Vector3(x, y, z)
+						
+						# Añadimos los dos triángulos que forman la cara cuadrada.
+						st.add_vertex(v2)
+						st.add_vertex(v1)
+						st.add_vertex(v0)
+						
+						st.add_vertex(v3)
+						st.add_vertex(v2)
+						st.add_vertex(v0)
+						
+						
+	# Generamos las normales para que la iluminación funcione correctamente.
+	st.generate_normals()
+	
+	var mesh_resource = st.commit()
+	
+	# Si no se generaron vértices, salimos.
+	if mesh_resource.get_surface_count() == 0:
+		mesh_instance.mesh = null
+		if collision_shape and collision_shape.shape:
+			collision_shape.shape = null
+		return
+	
+	print(mesh_resource.ARRAY_INDEX)
+	var nodes = chunk_nodes[chunk_pos]
+	nodes["mesh_instance"].mesh = mesh_resource
+	# Creamos la colisión. Para mallas de vóxeles, create_trimesh_shape() es perfecto.
+	nodes["collision_shape"].shape = mesh_resource.create_trimesh_shape()
 
 func check_and_remove_if_isolated(x: int, y: int, z: int) -> bool:
 	# No procesar vóxeles fuera de los límites o que ya son de aire.
@@ -319,119 +425,17 @@ func check_and_remove_if_isolated(x: int, y: int, z: int) -> bool:
 		return true
 	return false
 
-func generate_chunk_mesh(chunk_pos: Vector3i):
-	# Si el chunk no existe en nuestro diccionario, lo creamos.
-	if not chunk_nodes.has(chunk_pos):
-		var new_mesh_instance = MeshInstance3D.new()
-		var materialVoxel = StandardMaterial3D.new()
-		materialVoxel.vertex_color_use_as_albedo = true
-		materialVoxel.roughness = 1.0
-		new_mesh_instance.material_overlay = materialVoxel
-		
-		var new_collision_shape = CollisionShape3D.new()
-		
-		add_child(new_mesh_instance)
-		add_child(new_collision_shape)
-		
-		chunk_nodes[chunk_pos] = {
-			"mesh_instance": new_mesh_instance,
-			"collision_shape": new_collision_shape
-		}
-	
-	# Usaremos un SurfaceTool para construir la malla. Es más fácil que manejar arrays crudos.
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	
-	# Los vértices del cubo de procesamiento (0,0,0), (1,0,0), (1,1,0), etc.
-	var cube_offsets = [
-		Vector3(0, 0, 0), Vector3(1, 0, 0),
-		Vector3(1, 0, 1), Vector3(0, 0, 1),
-		Vector3(0, 1, 0), Vector3(1, 1, 0),
-		Vector3(1, 1, 1), Vector3(0, 1, 1)
-	]
-	
-	# ¡IMPORTANTE! Calcula los límites de este chunk específico.
-	var start_x = chunk_pos.x * SUB_CHUNK_SIZE
-	var start_y = chunk_pos.y * SUB_CHUNK_SIZE
-	var start_z = chunk_pos.z * SUB_CHUNK_SIZE
-	
-	var end_x = start_x + SUB_CHUNK_SIZE
-	var end_y = start_y + SUB_CHUNK_SIZE
-	var end_z = start_z + SUB_CHUNK_SIZE
-	
-	# Recorremos cada vóxel del mundo.
-	for y in range(start_y, end_y):
-		for z in range(start_z, end_z):
-			for x in range(start_x, end_x):
-				var cube_index = 0
-				for i in range(8):
-					var corner_pos = Vector3(x, y, z) + cube_offsets[i]
-					if get_voxel(corner_pos.x, corner_pos.y, corner_pos.z) != AIR:
-						cube_index |= (1 << i)
-					if cube_index == 0 or cube_index == 255:
-						continue
-				var tri_table_entry = triangulation_table[cube_index]
-				
-				for i in range(0, len(tri_table_entry), 3):
-					if tri_table_entry[i] == -1:
-						break
-					var edge1 = tri_table_entry[i]
-					var edge2 = tri_table_entry[i+1]
-					var edge3 = tri_table_entry[i+2]
-					var v1 = _interpolate_vertex(Vector3(x, y, z), edge1)
-					var v2 = _interpolate_vertex(Vector3(x, y, z), edge2)
-					var v3 = _interpolate_vertex(Vector3(x, y, z), edge3)
-					
-	
-	# ANHADIENDO COLORES ANTES DE ANHADIR VETICES
-	
-					var avg_pos = (v1 + v2 + v3) / 3.0
-					var sample_pos = avg_pos - Vector3(0, 0.01, 0)
-					#var floor_pos = avg_pos.floor()
-					
-					var voxel_type = get_voxel(sample_pos.x, sample_pos.y, sample_pos.z)
-					
-					if voxel_type == AIR:
-						var found_solid = false
-						for y_offset in [0, -1, 1]:
-							for z_offset in [0, -1, 1]:
-								for x_offset in [0, -1, 1]:
-									if found_solid: break
-									var check_pos = sample_pos + Vector3(x_offset, y_offset, z_offset)
-									var current_type = get_voxel(check_pos.x, check_pos.y, check_pos.z)
-									if current_type != AIR:
-										voxel_type = current_type
-										found_solid = true
-										break
-								if found_solid: break
-							if found_solid: break
-					var color = VOXEL_COLORS.get(voxel_type, VOXEL_COLORS[DIRT])
-					st.set_color(color)
-					
-					# --- FIN DE COLORIZACION DEL TERRENO --- 
-					
-					st.add_vertex(v1)
-					st.add_vertex(v3) # <-- Vértice 3 antes que el 2
-					st.add_vertex(v2)
-					
-	st.generate_normals()
-	var mesh_resource = st.commit()
-	
-	var nodes = chunk_nodes[chunk_pos]
-	nodes["mesh_instance"].mesh = mesh_resource
-	nodes["collision_shape"].shape = mesh_resource.create_trimesh_shape()
-
-func _interpolate_vertex(pos: Vector3, edge_index: int) -> Vector3:
-	var corner_offsets = [
-		Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 1), Vector3(0, 0, 1), 
-		Vector3(0, 1, 0), Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(0, 1, 1)
-	]
-	
-	var edge_verts_indices = edge_table[edge_index]
-	var p1_index = edge_verts_indices[0]
-	var p2_index = edge_verts_indices[1]
-	
-	var p1_world_pos = pos + corner_offsets[p1_index]
-	var p2_world_pos = pos + corner_offsets[p2_index]
-	
-	return (p1_world_pos + p2_world_pos) / 2.0
+#func _interpolate_vertex(pos: Vector3, edge_index: int) -> Vector3:
+	#var corner_offsets = [
+		#Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(1, 0, 1), Vector3(0, 0, 1), 
+		#Vector3(0, 1, 0), Vector3(1, 1, 0), Vector3(1, 1, 1), Vector3(0, 1, 1)
+	#]
+	#
+	#var edge_verts_indices = edge_table[edge_index]
+	#var p1_index = edge_verts_indices[0]
+	#var p2_index = edge_verts_indices[1]
+	#
+	#var p1_world_pos = pos + corner_offsets[p1_index]
+	#var p2_world_pos = pos + corner_offsets[p2_index]
+	#
+	#return (p1_world_pos + p2_world_pos) / 2.0

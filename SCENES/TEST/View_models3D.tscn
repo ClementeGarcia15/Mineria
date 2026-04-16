@@ -1,0 +1,8 @@
+[gd_scene format=3 uid="uid://boufxjaqvaw6h"]
+
+[ext_resource type="ArrayMesh" uid="uid://1pixeoscr0r8" path="res://SCENES/TEST/test.obj" id="1_i7xry"]
+
+[node name="ViewModels3d" type="Node3D" unique_id=1475625856]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1843343083]
+mesh = ExtResource("1_i7xry")
